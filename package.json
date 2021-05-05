@@ -1,0 +1,57 @@
+{
+  "name": "vca",
+  "version": "0.0.2",
+  "description": "Implementation of View Composition Algebra for Group-by Aggregaton queries",
+  "main": "dist/vca.js",
+  "directories": {
+    "test": "test"
+  },
+  "files": [
+    "dist/**/*.js",
+    "src/**/*.js"
+  ],
+  "scripts": {
+    "build": "pegjs src/lang.peg; npm run build-concat; rollup -c; npm run copy",
+    "build-concat": "ghead -n -4 src/lang.js > /tmp/lang.js1; cat src/lang-prefix.js /tmp/lang.js1 src/lang-suffix.js >> /tmp/lang.js; mv /tmp/lang.js src/lang.js",
+    "copy": "cp -r README.md dist package.json .npmignore .babelrc src test ~/code/vca/",
+    "test": "babel-tape-runner 'test/*-test.js'"
+  },
+  "author": "ewu",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/cli": "^7.0.0-rc.1",
+    "@babel/core": "^7.0.0-rc.1",
+    "@babel/plugin-proposal-export-namespace-from": "^7.12.13",
+    "@babel/preset-env": "^7.14.0",
+    "babel-tape-runner": "^3.0.0",
+    "colortape": "^0.1.2",
+    "eslint": "^7.14.0",
+    "jquery": "^3.5.1",
+    "jsdom": "^16.4.0",
+    "minicat": "^1.0.0",
+    "pg-promise": "^10.10.2",
+    "pg-types": "^3.0.1",
+    "ramda": "^0.27.1",
+    "rollup-plugin-commonjs": "^10.1.0",
+    "rollup-plugin-node-resolve": "^5.2.0",
+    "rollup-plugin-terser": "^7.0.2",
+    "sql.js": "^1.4.0",
+    "tape": "^5.0.1"
+  },
+  "dependencies": {
+    "jquery": "^3.5.1",
+    "pegjs": "^0.10.0",
+    "pg": "^8.6.0",
+    "ramda": "^0.27.1",
+    "rollup": "^2.45.2",
+    "squel": "^5.13.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/viewcompositionalgebra/vca.git"
+  },
+  "bugs": {
+    "url": "https://github.com/viewcompositionalgebra/vca/issues"
+  },
+  "homepage": "https://github.com/viewcompositionalgebra/vca#readme"
+}

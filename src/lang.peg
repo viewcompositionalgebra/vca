@@ -1,0 +1,271 @@
+{
+  let flatten = (head, tail, idx) => {
+    let res = [head];
+    tail.forEach((el) => { 
+      if (el && el[idx])
+        res.push(el[idx])
+    })
+    return res;
+
+  }
+
+  let flatstr = (x, rejectSpace, joinChar) => {
+    if (rejectSpace == null) {
+      rejectSpace = false;
+    }
+    if (joinChar == null) {
+      joinChar = '';
+    }
+    return R.reject(R.isEmpty, R.flatten(x)).join(joinChar);
+  };
+
+}
+
+
+start = query / expr
+
+query = 
+  ws q:Q ws 
+  { return q; }
+
+Q = 
+  g:groupby f:from w:where? 
+  { 
+    let ops = R.reject(R.isNil, [g, w, f]);
+    R.reduce((acc, op) => {
+      acc.c = op;
+      return op;
+    }, ops[0], R.tail(ops))
+
+    return g;
+  }
+
+
+groupby = 
+  SELECT terms:gbterms
+  { return GroupBy(GroupBy.termsToAgbFs(terms)); }
+
+from = 
+  FROM wsp n:name
+  { return Source({source: n, alias: n}); }
+
+where =
+  WHERE wsp head:expr tail:(ws "," ws expr)*
+  { return Where({ exprs: flatten(head, tail, 3) }) }
+
+gbterms = 
+  wsp head:pclause tail:(ws "," ws pclause)*
+  { return flatten(head, tail, 3); }
+
+pclause = 
+  e:expr a:(AS wsp alias)?
+  { 
+    if (!a) {
+      if (e.classType == "Attr") 
+        a = e.attr;
+      else if (e.classType == "Func")
+        a = "y"
+      else
+        throw Error(`PClause missing alias: ${e.classType}, ${e.type}, ${e.toSql()}`)
+    } else {
+      a = a[2]
+    }
+    return PClause({e, alias:a}) 
+  }
+
+expr = 
+  head:value tail:(ws binary_operator ws expr)?
+  {
+    let l = head;
+    if (!tail) return l;
+    return Expr({ op: tail[1], l, r:tail[3] });
+  }
+
+value =
+  fcall /
+  literal_value /
+  paren_value /
+  (t:name dot c:name { return Attr({ table: t, attr: c }); }) /
+  (c:name { return Attr({ attr: c})})
+
+literal_value =
+  x: (numeric_literal / string_literal)
+  { return Value(x) }
+
+paren_value = 
+  lparen ws e:expr ws rparen
+  { return Paren({expr:e}); }
+
+fcall = 
+  n:name ws lparen fargs:fargs? ws rparen
+  { 
+    fargs = fargs || [];
+    return Func({fname:n, args:fargs})
+  }
+
+fargs = 
+  head:expr tail:(ws "," ws expr)*
+  { return flatten(head, tail, 3) }
+ 
+  
+string_literal = 
+  s: js_string_literal
+  { 
+  return s;
+  }
+
+numeric_literal =
+  digits:( (plus/minus)?
+            ( ( ( digit )+ ( decimal_point ( digit )+ )? )
+            / ( decimal_point ( digit )+ ) ))
+  { 
+    var x = flatstr(digits);
+    if (x.indexOf('.') >= 0) {
+      return { type: "Number", value: parseFloat(x)};
+    }
+    return { type: "Number", value :parseInt(x) };
+  }
+
+
+unary_operator =
+  x: ( ws
+       ( '-' / '+' / '~' / 'NOT') )
+  { return x[1] }
+
+binary_operator = 
+  '||'
+   / '*' / '/' / '%'
+   / '+' / '-'
+   / '<<' / '>>' / '&' 
+   / '<=' / '>='
+   / '<' / '>'
+   / '=' / '==' / '!=' / '<>'
+   / 'OR' / 'or'
+   / 'AND' / 'and'
+
+
+
+boolean  = "true" / "false"
+name     =
+  str:[A-Za-z0-9_]+
+  { return str.join('') }
+alias    = name
+
+AS = wsp "as"i
+SELECT = "select"i
+FROM = wsp "FROM"i
+WHERE = wsp "WHERE"i
+ws  = [ \t\n\r]*
+wsp = [ \t\n\r]+
+digit = [0-9]
+decimal_point = dot
+equal = '='
+dot = '.'
+comma = ','
+semicolon = ';'
+minusminus = '--'
+minus = '-'
+plus = '+'
+lparen = '('
+rparen = ')'
+star = '*'
+newline = '\n'
+
+
+
+
+/***************************************/
+
+// copy paste from pegjs github StringLiteral parser
+// functionality: 
+//   parse source javacript code (i.e., UDF) as string literal
+
+/***************************************/
+
+js_string_literal "string"
+  = '"' chars:js_double_string_character* '"' {
+      return { type: "Literal", value: chars.join("") };
+    }
+  / "'" chars:js_single_string_character* "'" {
+      return { type: "Literal", value: chars.join("") };
+    }
+
+js_double_string_character
+  = !('"' / "\\" / js_line_terminator) js_source_character { return text(); }
+  / "\\" sequence:js_escape_sequence { return sequence; }
+  / js_line_continuation
+
+js_single_string_character
+  = !("'" / "\\" / js_line_terminator) js_source_character { return text(); }
+  / "\\" sequence:js_escape_sequence { return sequence; }
+  / js_line_continuation
+
+js_line_continuation
+  = "\\" js_line_terminator_sequence { return ""; }
+
+
+js_escape_sequence
+  = js_character_escape_sequence
+  / "0" !js_decimal_digit { return "\0"; }
+  / js_hex_escape_sequence
+  / js_unicode_escape_sequence
+
+js_line_terminator
+  = [\n\r\u2028\u2029]
+
+js_source_character
+  = .
+
+js_character_escape_sequence
+  = js_single_escape_character
+  / js_non_escape_character
+
+js_single_escape_character
+  = "'"
+  / '"'
+  / "\\"
+  / "b"  { return "\b";   }
+  / "f"  { return "\f";   }
+  / "n"  { return "\n";   }
+  / "r"  { return "\r";   }
+  / "t"  { return "\t";   }
+  / "v"  { return "\x0B"; }   // IE does not recognize "\v".
+
+js_line_terminator_sequence "end of line"
+  = "\n"
+  / "\r\n"
+  / "\r"
+  / "\u2028"
+  / "\u2029"
+
+js_non_escape_character
+  = !(js_escape_character / js_line_terminator) js_source_character { return text(); }
+
+js_escape_character
+  = js_single_escape_character
+  / js_decimal_digit
+  / "x"
+  / "u"
+
+
+js_decimal_digit
+  = [0-9]
+
+
+js_hex_escape_sequence
+  = "x" digits:$(js_hex_digit js_hex_digit) {
+      return String.fromCharCode(parseInt(digits, 16));
+    }
+
+js_hex_digit
+  = [0-9a-f]i
+
+
+js_unicode_escape_sequence
+  = "u" digits:$(js_hex_digit js_hex_digit js_hex_digit js_hex_digit) {
+      return String.fromCharCode(parseInt(digits, 16));
+    }
+
+
+
+
