@@ -11,9 +11,9 @@
     "src/**/*.js"
   ],
   "scripts": {
-    "build": "pegjs src/lang.peg; npm run build-concat; rollup -c; npm run copy",
+    "build": "pegjs src/lang.peg; npm run build-concat; rollup -c",
     "build-concat": "ghead -n -4 src/lang.js > /tmp/lang.js1; cat src/lang-prefix.js /tmp/lang.js1 src/lang-suffix.js >> /tmp/lang.js; mv /tmp/lang.js src/lang.js",
-    "copy": "cp -r README.md dist package.json .npmignore .babelrc src test ~/code/vca/",
+    "copy": "cp -r README.md data dist package.json .npmignore .babelrc src test ~/code/vca/",
     "test": "babel-tape-runner 'test/*-test.js'"
   },
   "author": "ewu",
