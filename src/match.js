@@ -145,9 +145,41 @@ export let getNaryDotMatch = (vs) => {
   return null;
 }
 
+const getMax = R.reduce(R.max, -Infinity)
+const isSubset = R.curry((subset, set) => 
+  R.equals(R.intersection(subset, set), subset));
+const toSchema = (v) => R.pluck("attr", v.q.schema())
+
+// Check that all schemas are either identical, 
+// or all subsets of the "largest" schema
 export let getUnionMatch = (vs) => {
-  let schemas = vs.map((v) => R.pluck("attr", v.q.schema()))
-  return R.all(R.equals(schemas[0]), R.tail(schemas))
+  let schemas = vs.map(toSchema)
+  console.log(schemas)
+
+  // find largest schema(s)
+  let sizes = R.pluck("length", schemas)
+  let maxSize = getMax(sizes)
+  console.log(maxSize)
+  let isMax = (schema) => schema.length == maxSize
+  let bMaxes = schemas.map(isMax)
+  let largestSchemas = schemas.filter(isMax)
+  
+  // make sure largest schemas are exact matches
+  if (!R.all(R.equals(largestSchemas[0]), R.tail(largestSchemas)))
+    return null;
+
+  // make sure the remaining schemas are subsets
+  let rest = R.reject(isMax, schemas)
+  if (rest && !R.all(isSubset(rest[0]), R.tail(rest)))
+    return null;
+  
+  console.log(sizes)
+  console.log(bMaxes)
+  return {
+    largest: vs.filter((v,i) => bMaxes[i], vs),
+    rest: vs.filter((v,i) => !bMaxes[i], vs)
+  }
+  
 }
 
 

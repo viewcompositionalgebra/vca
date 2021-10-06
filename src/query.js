@@ -219,15 +219,22 @@ export let Union = (({children}) => {
   return me;
 })
 
-export let Where = (({exprs, child}) => {
+export let Where = (({exprs, negated, child}) => {
   let me = () => {}
   me.classType = "Where"
   me.exprs = R.is(Array, exprs)? exprs : [exprs];
   me.c = child;
+  me.negated = (negated === undefined)? false : negated;
 
   me.toSql = () => {
+    let e = squel.expr()
+    me.exprs.forEach((expr) => e.and(expr.toSql()))
+
     var q = me.c.toSql();
-    me.exprs.forEach((e) => q.where(e.toSql()))
+    if (me.negated)
+      q.where(`not (${e.toString()})`)
+    else
+      q.where(e)
     return q;
   }
 
@@ -246,6 +253,7 @@ export let Where = (({exprs, child}) => {
   me.clone = () => {
     return Where({
       exprs: me.exprs.map(clone),
+      negated: me.negated,
       child: clone(me.c)
     });
   }
@@ -582,10 +590,12 @@ export let GroupBy = (({Agb, Fs, child}) => {
 
 
   me.toSql = () => {
-    let q = me.c.toSql()
+    let q = (me.c)? me.c.toSql() : squel.select()
+
     R.concat(me.Agb, me.Fs).forEach((pc) => 
       q.field(pc.e.toSql(), pc.alias)
     )
+
     me.Agb.forEach((g) => {
       if (g.e.classType != "Value")
         q.group(g.e.toSql())
@@ -635,6 +645,7 @@ const aggfnames = [
   "min",
   "max",
   "std",
+  "stddev",
   "count"
 ]
 
@@ -756,6 +767,21 @@ export let Expr = (({op, l, r}) => {
   return me;
 })
 
+export let List = (({exprs}) => {
+  let me = () => {}
+  me.classType = "List"
+  me.es = exprs;
+
+  me.getType = () => me.es[0].getType();
+  me.inferType = () => me.es[0].inferType()
+  me.toSql = () => `(${me.es.map(toSql()).join(", ")})`
+  me.traverse = (f) => {
+    if (f(me) != false) me.es.forEach((e) => e.traverse(f));
+  }
+  me.clone = () => List({exprs: me.es.map((e) => e.clone())})
+  return me;
+})
+
 export let Paren = (({expr}) => {
   let me = () => {}
   me.classType = "Paren"
@@ -869,7 +895,7 @@ export let Func = (({fname, args, distinct}) => {
   me.getType = () => { return "Number" }
   me.inferType = () => {
     let argTypes = R.uniq(me.args.map((e) => e.inferType()))
-    const passthroughs = ["avg", "min", "max", "std", "coalesce"]
+    const passthroughs = ["avg", "min", "max", "std", "stddev", "coalesce"]
     if (R.contains(R.toLower(me.fname), passthroughs)) 
       return argTypes[0]
     return Type.f(me.fname, argTypes)

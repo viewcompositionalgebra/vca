@@ -29,7 +29,7 @@ query =
   { return q; }
 
 Q = 
-  g:groupby f:from w:where? 
+  g:groupby f:from? w:where? 
   { 
     let ops = R.reject(R.isNil, [g, w, f]);
     R.reduce((acc, op) => {
@@ -84,6 +84,7 @@ expr =
 value =
   fcall /
   literal_value /
+  list /
   paren_value /
   (t:name dot c:name { return Attr({ table: t, attr: c }); }) /
   (c:name { return Attr({ attr: c})})
@@ -91,6 +92,14 @@ value =
 literal_value =
   x: (numeric_literal / string_literal)
   { return Value(x) }
+
+list = 
+  lparen ws l:list_args ws rparen
+  { return List({exprs: l}) }
+
+list_args = 
+  first:expr tail:(ws "," ws expr)+
+  { return flatten(first, tail, 3) }
 
 paren_value = 
   lparen ws e:expr ws rparen
@@ -140,6 +149,7 @@ binary_operator =
    / '<=' / '>='
    / '<' / '>'
    / '=' / '==' / '!=' / '<>'
+   / 'IN' / 'in'
    / 'OR' / 'or'
    / 'AND' / 'and'
 

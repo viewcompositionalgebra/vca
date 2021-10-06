@@ -232,14 +232,22 @@ export let VCA = (({app, View}) => {
     return null;
   }
 
+  // TODO: find a way to union a constant with a view to overlay a horizontal line..
   me.naryUnion = async (op, vs) => {
     let matches = getUnionMatch(vs)
     if (!matches) {
       console.error(vs)
       throw new Error("naryUnion: could not find match")
     }
+    // views with largest schemas and the rest
+    let {largest, rest} = matches;
+    console.log(matches)
 
-    let children = vs.map((v, i) =>  {
+
+    // all queries that will be unioned together
+    let children = [] 
+
+    largest.forEach((v) =>  {
       let q = v.q.clone()
       let ops = VCA.find(q, ["GroupBy", "Project"])
       let pc = PClause({
@@ -248,10 +256,14 @@ export let VCA = (({app, View}) => {
       }) 
       if (ops.length == 0) {
         let exprs = [ ]
-        return Project({ exprs, child: v.q })
+        children.push(Project({ exprs, child: v.q }))
+        return;
       }
 
       // TODO: reorder projections so they all match 1st query's schema
+      // 1. get matches
+      // 2. create custom projection for each query
+      // 3. union
 
       if (ops[0].classType == "Project") 
         ops[0].pcs.push(pc)
@@ -260,20 +272,60 @@ export let VCA = (({app, View}) => {
         let exprs = ops[0].schema().map((A) => 
           PClause({ e: Attr(A.attr), alias: A.attr }))
         exprs.push(pc)
-        return Project({ 
+        children.push(Project({ 
           exprs, 
-          child: Source({ source: q, alias: newAlias()}) })
+          child: Source({ source: q, alias: newAlias()}) 
+        }))
+        return
       }
-      return q;
+      children.push(q);
     })
+
+    // Handle the rest of the schemas
+    // v1 ∈ rest, v2 ∈ largest
+    // v1's schema is a subset of v2's, so perform a cross product 
+    // between v1.schema and v2.schema-v1.schema
+    let largeV = largest[0];
+    let largeSchema = R.pluck("attr", largeV.q.schema())
+    const aliasToPC = (alias) => PClause({ e: Attr(alias), alias })
+    rest.forEach((v) => {
+      let schema = R.pluck("attr", v.q.schema())
+      let diff = R.difference(largeSchema, schema);
+      let pc = PClause({
+        e: Value({type: "Literal", value: v.viewName}),
+        alias: 'qid'
+      }) 
+
+
+      let l = v.q;
+      let r = Project({
+        exprs: diff.map(aliasToPC),
+        child: Source( { source: largeV.q, alias: newAlias() })
+      })
+      let j = Join({
+        l, r,
+        lalias: newAlias("l"), 
+        ralias: newAlias("r")
+      })
+
+      let exprs = largeSchema.map(aliasToPC)
+      exprs.push(pc)
+      let q = Project({
+        exprs,
+        child: Source({ source: j, alias: newAlias() })
+      })
+      children.push(q)
+    })
+
+
 
     // Probably want to make qid a column-facet and swap nonmeasure
     // positional variable with column
     let union = Union({children})
-    let mapping = assignVisualMapping(union.schema(), vs[0].mapping)
+    let mapping = assignVisualMapping(union.schema(), largest[0].mapping)
     let opts = {
-      width: vs[0].width,
-      height: vs[0].height,
+      width: largest[0].width,
+      height: largest[0].height,
       viewType: "composed"
     }
 
